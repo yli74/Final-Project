@@ -1,0 +1,43 @@
+library(twitteR)
+library(plyr)
+
+#set up twitter APIs
+consumer_key <- "yGfMZdr02SidVYVTiul5YdJIh"
+consumer_secret <- "ZxTcNmfJQ2cxLlykvYbZFFn0upknNVkpmdxAiGRDCZwIFN8wkH"
+token <- "3192371979-CPwxqkws80IXLReSe1yMYl9QWEzCSEIv37lnPlZ" 
+token_secret <- "ZFeXPlFmA8hsDs6dCAeR4E909lIkfcSjUFGLQ3jGlmwo4" #Access token secret
+setup_twitter_oauth(consumer_key, consumer_secret, token, token_secret)
+
+#Get tweets about "House of Cards", due to the limitation, we'll set n=1500
+netflix.tweets<- searchTwitter("House of Cards",n=1500)
+tweet$getScreenName()
+tweet$getText()
+netflix.text=laply(netflix.tweets,function(t)t$getText())
+length(netflix.text)
+head(netflix.text) 
+write(netflix.text, "House_Cards_Tweets780.txt", ncolumns = 1)
+
+#loaded the positive and negative.txt from Hu and Liu
+pos.word <- scan("/users/yifeili/desktop/positive_words.txt", what = character(), comment.char = ";")
+neg.word <- scan("/users/yifeili/desktop/negative_words.txt", what = character(), comment.char = ";")
+
+#perform basic data cleaning
+score.sentiment <- function(mes.vec, pos.word, neg.word)
+{
+            mes.clean <- gsub("[[:punct:]]", " ", mes.vec)
+            mes.clean <- gsub("[[:cntrl:]]", "", mes.clean)
+            mes.clean <- gsub("\\d+", "", mes.clean) 
+            mes.clean <- gsub("[^[:graph:]]", "", mes.clean)
+            mes.clean <- tolower(mes.clean)
+            mes.lst <- strsplit(mes.clean, "") 
+           
+            score.pos <- sapply(mes.lst, function(x) sum(!is.na(match(x, pos.word))))  
+            score.neg <- sapply(mes.lst, function(x) sum(!is.na(match(x, neg.word))))
+            score.df <- data.frame(score = score.pos - score.neg, message = mes.vec, stringsAsFactors = F)
+            return (score.df)
+}
+
+tweet.scores <- score.sentiment(netflix.text, pos.word, neg.word)
+head(tweet.scores)
+
+write.csv(tweet.scores, file=paste('_scores.csv'), row.names=TRUE)
