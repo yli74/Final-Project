@@ -1,53 +1,15 @@
 library(twitteR)
 library(plyr)
-
-#set up twitter APIs
-consumer_key <- "yGfMZdr02SidVYVTiul5YdJIh"
-consumer_secret <- "ZxTcNmfJQ2cxLlykvYbZFFn0upknNVkpmdxAiGRDCZwIFN8wkH"
-token <- "3192371979-CPwxqkws80IXLReSe1yMYl9QWEzCSEIv37lnPlZ" 
-token_secret <- "ZFeXPlFmA8hsDs6dCAeR4E909lIkfcSjUFGLQ3jGlmwo4" #Access token secret
-setup_twitter_oauth(consumer_key, consumer_secret, token, token_secret)
-
-#Get tweets about "House of Cards", due to the limitation, we'll set n=1500
-netflix.tweets<- searchTwitter("House of Cards S1",n=1500)
-tweet=netflix.tweets[[1]]
-tweet$getScreenName()
-tweet$getText()
-netflix.text=laply(netflix.tweets,function(t)t$getText())
-length(netflix.text)
-head(netflix.text) 
-write(netflix.text, "HouseofCards_Tweets.txt", ncolumns = 1)
-
-#loaded the positive and negative.txt from Hu and Liu
-positive <- scan("/users/yifeili/desktop/positive_words.txt", what = character(), comment.char = ";")
-negative <- scan("/users/yifeili/desktop/negative_words.txt", what = character(), comment.char = ";")
-
-#perform basic data cleaning
-scoredsentiment <- function(hoc.vec, pos.word, neg.word)
-{
-            clean <- gsub("[[:punct:]]", " ", hoc.vec)
-            clean <- gsub("[^[:graph:]]", "", clean)
-            clean <- gsub("[[:cntrl:]]", "", clean)
-            clean <- gsub("\\d+", "", clean) 
-            clean <- tolower(clean)
-            
-            hoc.lst <- strsplit(clean, "") 
-            scoredpositive <- sapply(hoc.lst, function(x) sum(!is.na(match(x, positive))))  
-            scorednegative <- sapply(hoc.lst, function(x) sum(!is.na(match(x, negative))))
-            hoc.df <- data.frame(score = scoredpositive - scorednegative, message = hoc.vec, stringsAsFactors = F)
-            return (hoc.df)
-}
-
-twitter_scores <- scoredsentiment(netflix.text, positive, negative)
-head(twitter_scores,10)
-
-write.csv(twitter_scores, file=paste('_scores.csv'), row.names=TRUE)
-
-#Sentimental Analysis with Datumbox API
+library(stringr)
+library(syuzhet)
+library(lubridate)
+library(ggplot2)
+library(scales)
+library(reshape2)
+library(dplyr )
+library(tidyr)
 library(ThinkToStartR)
-library(twitteR)
 library(plyr)
-library(twitteR)
 library(RCurl)
 library(wordcloud)
 
@@ -58,6 +20,167 @@ token <- "3192371979-CPwxqkws80IXLReSe1yMYl9QWEzCSEIv37lnPlZ"
 token_secret <- "ZFeXPlFmA8hsDs6dCAeR4E909lIkfcSjUFGLQ3jGlmwo4" #Access token secret
 setup_twitter_oauth(consumer_key, consumer_secret, token, token_secret)
 
+#Get tweets about "House of Cards", due to the limitation, we'll set n=3000
+netflix.tweets<- searchTwitter("#HouseofCards",n=3000,lang="en") 
+tweet=netflix.tweets[[1]]
+tweet$getScreenName()
+tweet$getText()
+netflix.text=laply(netflix.tweets,function(t)t$getText())
+length(netflix.text)
+head(netflix.text) 
+
+#performing data cleaning and store in csv.file
+netflix.text = gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", netflix.text)
+netflix.text = gsub("@\\w+", "", netflix.text)
+netflix.text = gsub("[[:punct:]]", "", netflix.text)
+netflix.text = gsub("[[:digit:]]", "", netflix.text)
+netflix.text = gsub("http\\w+", "", netflix.text)
+netflix.text = gsub("[ \t]{2,}", "", netflix.text)
+netflix.text = gsub("^\\s+|\\s+$", "", netflix.text)
+netflix.text <- str_replace_all(netflix.text," "," ")
+netflix.text <- str_replace_all(netflix.text,"#[a-z,A-Z]*","")
+netflix.text <- str_replace_all(netflix.text,"@[a-z,A-Z]*","")  
+netflix.text <- tolower(netflix.text)
+head(netflix.text)
+write(netflix.text, "HouseofCards_Tweets.csv",ncolumn=1)
+
+#perform sentimental analysis 
+sentiment <- get_nrc_sentiment(netflix.text)
+head(sentiment)
+
+#perform data transformation and add the sentimental analysis into tweets
+netflix.text <- cbind(netflix.text, sentiment)
+head(netflix.text)
+
+#use the graphic to present the findings
+
+#set up y = count
+Totals<- data.frame(colSums(netflix.text[,c(11:10)]))
+names(Totals) <- "score"
+
+#set up x = sentiment
+Totals <- cbind("sentiment" = rownames(Totals), Totals)
+rownames(Totals) <- NULL
+
+ggplot(Totals, aes(x = sentiment, y = score)) +
+        geom_bar(aes(fill = sentiment), stat = "identity", position = "dodge", width = 1) +
+        xlab("sentiment") + ylab("sentiment Scores") + ggtitle("Sentiment Scores for All Tweets")
+
+##Sentimental Analysis with Datumbox API
+#set up twitter APIs
+consumer_key <- "yGfMZdr02SidVYVTiul5YdJIh"
+consumer_secret <- "ZxTcNmfJQ2cxLlykvYbZFFn0upknNVkpmdxAiGRDCZwIFN8wkH"
+token <- "3192371979-CPwxqkws80IXLReSe1yMYl9QWEzCSEIv37lnPlZ" 
+token_secret <- "ZFeXPlFmA8hsDs6dCAeR4E909lIkfcSjUFGLQ3jGlmwo4" #Access token secret
+setup_twitter_oauth(consumer_key, consumer_secret, token, token_secret)
+
 ThinkToStart("setup_twitter_oauth",api_key="yGfMZdr02SidVYVTiul5YdJIh",api_secret="ZxTcNmfJQ2cxLlykvYbZFFn0upknNVkpmdxAiGRDCZwIFN8wkH")
 
-ThinkToStart("SentimentCloud","House of Cards S1",30,"2c2aab873c34498ba6624bfdf0cf2faf")
+ThinkToStart("SentimentCloud","#HouseofCards",30,"2c2aab873c34498ba6624bfdf0cf2faf")
+
+library(twitteR)
+library(stringr)
+library(syuzhet)
+library(lubridate)
+library(ggplot2)
+library(scales)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(plyr)
+library(ThinkToStartR)
+library(RCurl)
+library(wordcloud)
+library(rvest)
+library(XML)
+library(tm)
+library(RTextTools)
+library(e1071)
+
+#retrieve top reviews from best reviews and prolific authors on IMDb.com
+counts = c(0,10,20,30,40,50,60,70,80,90,100)
+reviews = NULL
+for (j in counts){
+  
+  page1 = read_html(paste0("http://www.imdb.com/title/tt1856010/reviews?filter=best;filter=best;start=",j))
+  page2 = read_html(paste0("http://www.imdb.com/title/tt1856010/reviews?filter=prolific;filter=prolific;start=",j))
+  
+  reviews1 <- page1 %>% html_nodes("#tn15content") %>%
+  html_nodes("div+p") %>%
+  html_text()
+  
+  reviews2 <- page2 %>% html_nodes("#tn15content") %>%
+  html_nodes("div+p") %>%
+  html_text()
+  
+  best.reviews = setdiff(reviews1, c("*** This review may contain spoilers ***"))
+  prolific.authors = setdiff(reviews2, c("*** This review may contain spoilers ***"))
+  
+  reviews <- c(reviews,best.reviews,prolific.authors)
+  reviews <- gsub("\r?\n|\r", " ", reviews) 
+  reviews <- tolower(gsub("[^[:alnum:] ]", " ", reviews))
+  reviews <- gsub("<.*?>", " ", reviews)
+  reviews <- iconv(reviews, "latin1", "ASCII", sub="")
+  reviews <-  removeNumbers(reviews)  
+  reviews <- stripWhitespace(reviews)
+  reviews <-  gsub("^\\s+|\\s+$", "", reviews)
+}
+
+  IMDbsentiment <- cbind(get_nrc_sentiment(reviews), reviews)
+  
+  #Convert the list to a data frame then convert to a tbl_df format
+  clean.reviews = data.frame(text = reviews,class = get_nrc_sentiment(reviews), stringsAsFactors = T)
+  str(clean.reviews)
+  clean = as.data.frame(clean.reviews)
+  head(clean)
+  clean_df <- tbl_df(clean)  
+  write.csv(clean.reviews, "IMDb.CSV")
+  
+  #Perfrom data cleaning and calculate the final score 
+  IMDb1<- clean_df %>%
+   select(text, positive=class.positive, negative= class.negative, -(class.anger:class.trust))%>%
+   mutate(Total = positive - negative)
+  head(IMDb1)
+  
+  write.csv(IMDb1, "TotalIMDb.CSV")
+  
+  FinalIMDb <- select(IMDb1,text,Total)
+  head(FinalIMDb)
+  
+  #reshape my data then visualize the analyis
+  IMDb1  %>% gather(sentiment, scores, -text) %>%
+    ggplot(data = .) + 
+    geom_line(aes(x = text, y = scores, group = sentiment, color = sentiment))+ggtitle("Compare Sentimental Scores for IMDb User Reviews")
+
+ clean_df   %>% 
+    gather(sentiment, scores, -text) %>%
+    ggplot() +
+    geom_bar(aes(y = scores, x = text, fill = sentiment), stat = "identity")+ggtitle("Total Sentimental Scores for IMDb User Reviews")
+
+#import the data frame into MySQL
+library("RMySQL")
+library("knitr")
+dbConnection<- dbConnect(dbDriver("MySQL"), user="root", password="", dbname="IMDb", host="127.0.0.1", port=3306)
+dbWriteTable(conn = dbConnection, name = 'IMDb88', value = as.data.frame(FinalIMDb))
+
+all_cons <- dbListConnections(MySQL())
+for(con in all_cons) 
+  dbDisconnect(con) 
+
+#document classification
+
+doc_matrix <- create_matrix(FinalIMDb$text, language="english", removeNumbers=TRUE,
+stemWords=TRUE, removeSparseTerms=.99)
+doc_matrix
+
+container <- create_container(doc_matrix, FinalIMDb$text, trainSize=1:109,
+testSize=110:122, virgin=FALSE)
+
+SVM <- train_model(container,"SVM")
+MAXENT <- train_model(container,"MAXENT")
+
+SVM_CLASSIFY <- classify_model(container, SVM)
+MAXENT_CLASSIFY <- classify_model(container, MAXENT)
+
+head(SVM_CLASSIFY)
+head(MAXENT_CLASSIFY)
